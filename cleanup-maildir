@@ -37,6 +37,8 @@ OPTIONS
   -t, --trash-folder=F
       Use F as trash folder when COMMAND is 'trash'.
       Default is 'Trash'.
+  -T, --trashed-only
+      Only touch messages with trashed flag ('T').
   --archive-folder=F
       Use F as the base for constructing archive folders.  For example, if F is
       'Archive', messages from 2004 might be put in the folder 'Archive.2004'.
@@ -187,6 +189,14 @@ class MaildirMessage(rfc822.Message):
             return True
         return False
 
+    def isTrashed(self):
+        """return true if the message is flagged as trashed"""
+        import re
+        fname = get_flname(self.fp)
+        if re.search(r':.*T', fname) != None:
+            return True
+        return False
+
     def getFlags(self):
         """return the flag part of the message's filename"""
         parts = get_flname(self.fp).split(':')
@@ -285,6 +295,7 @@ class MaildirCleaner(object):
     trashFolder = "Trash"
     isTrialRun = False
     keepRead = False
+    trashedOnly = False
 
     def __init__(self, folderBase=None):
         """Initialize the MaildirCleaner
@@ -364,7 +375,8 @@ class MaildirCleaner(object):
                     and msg.getSubjectHash() in self.keepSubjects:
                 self.log(logging.DEBUG, "Keeping #%d (topic flagged)" % i, msg)
             else:
-                if (msg.getAge() >= minAge) and ((not self.keepRead) or (self.keepRead and msg.isNew())):
+                if (msg.getAge() >= minAge) and (self.trashedOnly == msg.isTrashed()) \
+                        and ((not self.keepRead) or (self.keepRead and msg.isNew())):
                     if mode == 'trash':
                         self.log(logging.INFO, "%sTrashing #%d (old)" %
                                  (fakeMsg, i), msg)
@@ -425,11 +437,11 @@ cleaner = MaildirCleaner()
 # Read command-line arguments
 try:
     opts, args = getopt.getopt(sys.argv[1:], 
-            "hqvnrm:t:a:kd:",
+            "hqvnrTm:t:a:kd:",
             ["help", "quiet", "verbose", "version", "mode=", "trash-folder=",
              "age=", "keep-flagged-threads", "keep-read", "folder-seperator=",
              "folder-prefix=", "maildir-root=", "archive-folder=",
-             "archive-hierarchy-depth=", "trial-run"])
+             "archive-hierarchy-depth=", "trial-run", "trashed-only"])
 except getopt.GetoptError, (msg, opt):
     logger.error("%s\n\n%s" % (msg, __doc__))
     sys.exit(2)
@@ -464,6 +476,8 @@ for o, a in opts:
         cleaner.keepFlaggedThreads = True
     if o in ("-r", "--keep-read"):
         cleaner.keepRead = True
+    if o in ("-T", "--trashed-only"):
+        cleaner.trashedOnly = True
     if o == "--folder-seperator":
         cleaner.folderSeperator = a
     if o == "--folder-prefix":
